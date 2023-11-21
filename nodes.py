@@ -5,6 +5,65 @@ import torch
 from io import BytesIO
 from server import PromptServer, BinaryEventTypes
 
+def process_image_base64(image_base64):
+    try:
+        imgdata = base64.b64decode(image_base64)
+        img = Image.open(BytesIO(imgdata))
+    except Exception as e:
+        print(f"Error decoding or opening the image: {e}")
+        return None, None
+
+    try:
+        if "A" in img.getbands():
+            # print("Found alpha channel")
+            mask = np.array(img.getchannel("A")).astype(np.float32) / 255.0
+            mask = 1.0 - torch.from_numpy(mask)
+        else:
+            # print("No alpha channel found")
+            mask = torch.zeros((img.height, img.width), dtype=torch.float32, device="cpu")
+
+        img = img.convert("RGB")
+        img_array = np.array(img).astype(np.float32) / 255.0
+        img_tensor = torch.from_numpy(img_array).unsqueeze(0)
+    except Exception as e:
+        print(f"Error processing the image: {e}")
+        return None, None
+
+    return img_tensor, mask
+
+
+class LoadImagesBase64:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "images_base64_str": ("STRING", {"multiline": True}),
+            }
+        }
+    RETURN_TYPES = ("IMAGE", "MASK")
+    CATEGORY = "_external_tooling"
+    FUNCTION = "load_images"
+
+    def load_images(self, images_base64_str):
+        # Split the multiline Base64 string into a list of individual Base64 strings
+        images_base64_list = images_base64_str.strip().split('\n')
+        image_list = []
+        mask_list = []
+
+        for image_base64 in images_base64_list:
+            try:
+                img_tensor, mask = process_image_base64(image_base64)
+                image_list.append(img_tensor)
+                mask_list.append(mask)
+            except Exception as e:
+                # Handle exceptions from faulty base64 strings
+                print(f"Error processing base64 image: {e}")
+                continue  # Skip this image and continue with the next
+
+        if len(image_list) == 0:
+            raise FileNotFoundError("No images could be loaded from the provided Base64 string.")
+
+        return (torch.cat(image_list, dim=0), torch.stack(mask_list, dim=0))
 
 class LoadImageBase64:
     @classmethod
@@ -16,19 +75,7 @@ class LoadImageBase64:
     FUNCTION = "load_image"
 
     def load_image(self, image):
-        imgdata = base64.b64decode(image)
-        img = Image.open(BytesIO(imgdata))
-
-        if "A" in img.getbands():
-            mask = np.array(img.getchannel("A")).astype(np.float32) / 255.0
-            mask = 1.0 - torch.from_numpy(mask)
-        else:
-            mask = torch.zeros((64, 64), dtype=torch.float32, device="cpu")
-
-        img = img.convert("RGB")
-        img = np.array(img).astype(np.float32) / 255.0
-        img = torch.from_numpy(img)[None,]
-
+        img, mask = process_image_base64(image)
         return (img, mask)
 
 
