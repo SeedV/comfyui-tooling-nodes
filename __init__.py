@@ -6,6 +6,7 @@ NODE_CLASS_MAPPINGS = {
     "ETN_SendImageWebSocket": nodes.SendImageWebSocket,
     "ETN_CropImage": nodes.CropImage,
     "ETN_ApplyMaskToImage": nodes.ApplyMaskToImage,
+    "ETN_LoadImagesBase64": nodes.LoadImagesBase64,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "ETN_LoadImageBase64": "Load Image (Base64)",
@@ -13,4 +14,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ETN_SendImageWebSocket": "Send Image (WebSocket)",
     "ETN_CropImage": "Crop Image",
     "ETN_ApplyMaskToImage": "Apply Mask to Image",
+    "ETN_LoadImagesBase64": "Load Images (Base64)",
 }
