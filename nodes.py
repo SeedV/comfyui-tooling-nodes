@@ -40,7 +40,7 @@ class LoadImagesBase64:
                 "images_base64_str": ("STRING", {"multiline": True}),
             }
         }
-    RETURN_TYPES = ("IMAGE", "MASK")
+    RETURN_TYPES = ("IMAGE", "MASK", "INT")
     CATEGORY = "_external_tooling"
     FUNCTION = "load_images"
 
@@ -63,7 +63,7 @@ class LoadImagesBase64:
         if len(image_list) == 0:
             raise FileNotFoundError("No images could be loaded from the provided Base64 string.")
 
-        return (torch.cat(image_list, dim=0), torch.stack(mask_list, dim=0))
+        return (torch.cat(image_list, dim=0), torch.stack(mask_list, dim=0), len(image_list))
 
 class LoadImageBase64:
     @classmethod
