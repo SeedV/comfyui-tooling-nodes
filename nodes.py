@@ -81,8 +81,8 @@ class LoadImageBase64:
         return {
             "required":
                 {
-                    "upload": (sorted(files), {"image_upload": True}),
-                    "image": ("STRING", {"multiline": False})
+                    "image": (sorted(files), {"image_upload": True}),
+                    "image_base64": ("STRING", {"multiline": False})
                 },
         }
 
@@ -90,11 +90,10 @@ class LoadImageBase64:
     CATEGORY = "_external_tooling"
     FUNCTION = "load_image"
 
-    def load_image(self, upload, image):
-        if image:
-            img, mask = process_image_base64(image)
+    def load_image(self, image, image_base64):
+        if image_base64:
+            img, mask = process_image_base64(image_base64)
             return (img, mask)
-        image = upload
         image_path = folder_paths.get_annotated_filepath(image)
 
         img = node_helpers.pillow(Image.open, image_path)
@@ -139,21 +138,21 @@ class LoadImageBase64:
         return (output_image, output_mask)
 
     @classmethod
-    def IS_CHANGED(s, upload, image):
+    def IS_CHANGED(s, image, image_base64):
         m = hashlib.sha256()
-        if not image:
-            image_path = folder_paths.get_annotated_filepath(upload)
+        if not image_base64:
+            image_path = folder_paths.get_annotated_filepath(image)
             with open(image_path, 'rb') as f:
                 bytes = f.read()
         else:
-            bytes = base64.b64decode(image)
+            bytes = base64.b64decode(image_base64)
         m.update(bytes)
         return m.digest().hex()
 
     @classmethod
-    def VALIDATE_INPUTS(s, upload, image):
-        if not image and not folder_paths.exists_annotated_filepath(upload):
-            return "Invalid image file: {}".format(upload)
+    def VALIDATE_INPUTS(s, image, image_base64):
+        if not image_base64 and not folder_paths.exists_annotated_filepath(image):
+            return "Invalid image file: {}".format(image)
         return True
 
 
