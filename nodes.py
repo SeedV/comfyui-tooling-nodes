@@ -4,6 +4,12 @@ import base64
 import torch
 from io import BytesIO
 from server import PromptServer, BinaryEventTypes
+from PIL import Image, ImageOps, ImageSequence
+import folder_paths
+import hashlib
+import os
+import node_helpers
+
 
 def process_image_base64(image_base64):
     try:
@@ -40,6 +46,7 @@ class LoadImagesBase64:
                 "images_base64_str": ("STRING", {"multiline": True}),
             }
         }
+
     RETURN_TYPES = ("IMAGE", "MASK", "INT")
     CATEGORY = "_external_tooling"
     FUNCTION = "load_images"
@@ -65,18 +72,89 @@ class LoadImagesBase64:
 
         return (torch.cat(image_list, dim=0), torch.stack(mask_list, dim=0), len(image_list))
 
+
 class LoadImageBase64:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {"image": ("STRING", {"multiline": False})}}
+        input_dir = folder_paths.get_input_directory()
+        files = [f for f in os.listdir(input_dir) if os.path.isfile(os.path.join(input_dir, f))]
+        return {
+            "required":
+                {
+                    "upload": (sorted(files), {"image_upload": True}),
+                    "image": ("STRING", {"multiline": False})
+                },
+        }
 
     RETURN_TYPES = ("IMAGE", "MASK")
     CATEGORY = "_external_tooling"
     FUNCTION = "load_image"
 
-    def load_image(self, image):
-        img, mask = process_image_base64(image)
-        return (img, mask)
+    def load_image(self, upload, image):
+        if image:
+            img, mask = process_image_base64(image)
+            return (img, mask)
+        image = upload
+        image_path = folder_paths.get_annotated_filepath(image)
+
+        img = node_helpers.pillow(Image.open, image_path)
+
+        output_images = []
+        output_masks = []
+        w, h = None, None
+
+        excluded_formats = ['MPO']
+
+        for i in ImageSequence.Iterator(img):
+            i = node_helpers.pillow(ImageOps.exif_transpose, i)
+
+            if i.mode == 'I':
+                i = i.point(lambda i: i * (1 / 255))
+            image = i.convert("RGB")
+
+            if len(output_images) == 0:
+                w = image.size[0]
+                h = image.size[1]
+
+            if image.size[0] != w or image.size[1] != h:
+                continue
+
+            image = np.array(image).astype(np.float32) / 255.0
+            image = torch.from_numpy(image)[None,]
+            if 'A' in i.getbands():
+                mask = np.array(i.getchannel('A')).astype(np.float32) / 255.0
+                mask = 1. - torch.from_numpy(mask)
+            else:
+                mask = torch.zeros((64, 64), dtype=torch.float32, device="cpu")
+            output_images.append(image)
+            output_masks.append(mask.unsqueeze(0))
+
+        if len(output_images) > 1 and img.format not in excluded_formats:
+            output_image = torch.cat(output_images, dim=0)
+            output_mask = torch.cat(output_masks, dim=0)
+        else:
+            output_image = output_images[0]
+            output_mask = output_masks[0]
+
+        return (output_image, output_mask)
+
+    @classmethod
+    def IS_CHANGED(s, upload, image):
+        m = hashlib.sha256()
+        if not image:
+            image_path = folder_paths.get_annotated_filepath(upload)
+            with open(image_path, 'rb') as f:
+                bytes = f.read()
+        else:
+            bytes = base64.b64decode(image)
+        m.update(bytes)
+        return m.digest().hex()
+
+    @classmethod
+    def VALIDATE_INPUTS(s, upload, image):
+        if not image and not folder_paths.exists_annotated_filepath(upload):
+            return "Invalid image file: {}".format(upload)
+        return True
 
 
 class LoadMaskBase64:
@@ -158,7 +236,7 @@ class CropImage:
     FUNCTION = "crop"
 
     def crop(self, image, x, y, width, height):
-        out = image[:, y : y + height, x : x + width, :]
+        out = image[:, y: y + height, x: x + width, :]
         return (out,)
 
 
