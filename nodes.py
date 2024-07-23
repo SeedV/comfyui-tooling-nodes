@@ -76,6 +76,20 @@ class LoadImagesBase64:
 class LoadImageBase64:
     @classmethod
     def INPUT_TYPES(s):
+        return {"required": {"image": ("STRING", {"multiline": False})}}
+
+    RETURN_TYPES = ("IMAGE", "MASK")
+    CATEGORY = "_external_tooling"
+    FUNCTION = "load_image"
+
+    def load_image(self, image):
+        img, mask = process_image_base64(image)
+        return (img, mask)
+
+
+class LoadImageOrBase64:
+    @classmethod
+    def INPUT_TYPES(s):
         input_dir = folder_paths.get_input_directory()
         files = [f for f in os.listdir(input_dir) if os.path.isfile(os.path.join(input_dir, f))]
         return {
